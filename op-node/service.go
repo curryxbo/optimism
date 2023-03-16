@@ -56,6 +56,9 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	}
 
 	l2SyncEndpoint := NewL2SyncEndpointConfig(ctx)
+	if l2SyncEndpoint.L2NodeAddr == "" { // optional config
+		l2SyncEndpoint = nil
+	}
 
 	cfg := &node.Config{
 		L1:     l1Endpoint,
@@ -136,6 +139,7 @@ func NewL2EndpointConfig(ctx *cli.Context, log log.Logger) (*node.L2EndpointConf
 func NewL2SyncEndpointConfig(ctx *cli.Context) *node.L2SyncEndpointConfig {
 	return &node.L2SyncEndpointConfig{
 		L2NodeAddr: ctx.GlobalString(flags.BackupL2UnsafeSyncRPC.Name),
+		TrustRPC:   ctx.GlobalBool(flags.BackupL2UnsafeSyncRPCTrustRPC.Name),
 	}
 }
 

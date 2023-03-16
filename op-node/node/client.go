@@ -20,7 +20,7 @@ type L2EndpointSetup interface {
 }
 
 type L2SyncEndpointSetup interface {
-	Setup(ctx context.Context, log log.Logger) (cl client.RPC, err error)
+	Setup(ctx context.Context, log log.Logger) (cl client.RPC, trust bool, err error)
 	Check() error
 }
 
@@ -84,17 +84,18 @@ func (p *PreparedL2Endpoints) Setup(ctx context.Context, log log.Logger) (client
 type L2SyncEndpointConfig struct {
 	// Address of the L2 RPC to use for backup sync
 	L2NodeAddr string
+	TrustRPC   bool
 }
 
 var _ L2SyncEndpointSetup = (*L2SyncEndpointConfig)(nil)
 
-func (cfg *L2SyncEndpointConfig) Setup(ctx context.Context, log log.Logger) (client.RPC, error) {
+func (cfg *L2SyncEndpointConfig) Setup(ctx context.Context, log log.Logger) (cl client.RPC, trust bool, err error) {
 	l2Node, err := client.NewRPC(ctx, log, cfg.L2NodeAddr)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return l2Node, nil
+	return l2Node, cfg.TrustRPC, nil
 }
 
 func (cfg *L2SyncEndpointConfig) Check() error {
@@ -105,18 +106,19 @@ func (cfg *L2SyncEndpointConfig) Check() error {
 	return nil
 }
 
-type L2SyncRPCConfig struct {
+type PreparedL2SyncEndpoint struct {
 	// RPC endpoint to use for syncing
-	Rpc client.RPC
+	Rpc      client.RPC
+	TrustRPC bool
 }
 
-var _ L2SyncEndpointSetup = (*L2SyncRPCConfig)(nil)
+var _ L2SyncEndpointSetup = (*PreparedL2SyncEndpoint)(nil)
 
-func (cfg *L2SyncRPCConfig) Setup(ctx context.Context, log log.Logger) (client.RPC, error) {
-	return cfg.Rpc, nil
+func (cfg *PreparedL2SyncEndpoint) Setup(ctx context.Context, log log.Logger) (cl client.RPC, trust bool, err error) {
+	return cfg.Rpc, cfg.TrustRPC, nil
 }
 
-func (cfg *L2SyncRPCConfig) Check() error {
+func (cfg *PreparedL2SyncEndpoint) Check() error {
 	if cfg.Rpc == nil {
 		return errors.New("rpc cannot be nil")
 	}
