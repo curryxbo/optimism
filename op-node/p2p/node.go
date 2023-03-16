@@ -146,6 +146,8 @@ func (n *NodeP2P) Close() error {
 		if err := n.host.Close(); err != nil {
 			result = multierror.Append(result, fmt.Errorf("failed to close p2p host cleanly: %w", err))
 		}
+		// TODO close sync loop
+
 	}
 	return result.ErrorOrNil()
 }
