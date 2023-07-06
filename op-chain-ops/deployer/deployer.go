@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
@@ -94,6 +95,18 @@ func Deploy(backend *backends.SimulatedBackend, constructors []Constructor, cb D
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("_______________________________________________________-")
+	fmt.Println("_______________________________________________________-")
+	fmt.Println("_______________________________________________________-")
+	fmt.Println("_______________________________________________________-")
+	fmt.Println("_______________________________________________________-")
+	fmt.Println("_______________________________________________________-")
+	fmt.Println("_______________________________________________________-")
+	for _, deployment := range constructors {
+		fmt.Println("name", deployment.Name)
+	}
+	os.Exit(0)
 
 	opts.GasLimit = 15_000_000
 

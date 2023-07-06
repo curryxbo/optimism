@@ -60,6 +60,8 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
     ///         This may be removed in the future.
     bool public paused;
 
+    address public l1Messenger;
+
     /// @notice Emitted when a transaction is deposited from L1 to L2.
     ///         The parameters of this event are read by the rollup node and used to derive deposit
     ///         transactions on L2.
@@ -103,29 +105,35 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         _;
     }
 
+    /// @notice Pass when onlyMessenger.
+    modifier onlyMessenger(){
+        require(msg.sender == l1Messenger,"messenger contract unauthenticated");
+        _;
+    }
+
     /// @custom:semver 1.7.1
     /// @notice Constructs the OptimismPortal contract.
     /// @param _l2Oracle Address of the L2OutputOracle contract.
     /// @param _guardian Address that can pause deposits and withdrawals.
-    /// @param _paused Sets the contract's pausability state.
     /// @param _config Address of the SystemConfig contract.
     constructor(
         L2OutputOracle _l2Oracle,
         address _guardian,
-        bool _paused,
+//        bool _paused,
         SystemConfig _config
     ) Semver(1, 7, 1) {
         L2_ORACLE = _l2Oracle;
         GUARDIAN = _guardian;
         SYSTEM_CONFIG = _config;
-        initialize(_paused);
+//        initialize(_paused);
     }
 
     /// @notice Initializer.
-    function initialize(bool _paused) public initializer {
+    function initialize(bool _paused,address _l1Messenger) public initializer {
         l2Sender = Constants.DEFAULT_L2_SENDER;
         paused = _paused;
         __ResourceMetering_init();
+        l1Messenger = _l1Messenger;
     }
 
     /// @notice Pauses deposits and withdrawals.
@@ -379,7 +387,7 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         uint64 _gasLimit,
         bool _isCreation,
         bytes memory _data
-    ) public payable metered(_gasLimit) {
+    ) public payable metered(_gasLimit) onlyMessenger{
         // Just to be safe, make sure that people specify address(0) as the target when doing
         // contract creations.
         if (_isCreation) {
