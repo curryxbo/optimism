@@ -86,6 +86,9 @@ func BuildL1DeveloperGenesis(config *DeployConfig) (*core.Genesis, error) {
 	depsByName := make(map[string]deployer.Deployment)
 	depsByAddr := make(map[common.Address]deployer.Deployment)
 	for _, dep := range deployments {
+		// todo delete
+		fmt.Println("dep.Name", dep.Name)
+		fmt.Println("dep.Address.Hex()", dep.Address.Hex())
 		depsByName[dep.Name] = dep
 		depsByAddr[dep.Address] = dep
 	}
@@ -99,8 +102,9 @@ func BuildL1DeveloperGenesis(config *DeployConfig) (*core.Genesis, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	// Initialize the OptimismPortal without being paused
-	data, err := portalABI.Pack("initialize", false)
+	data, err := portalABI.Pack("initialize", false, depsByName["L1CrossDomainMessenger"].Address)
 	if err != nil {
 		return nil, fmt.Errorf("cannot abi encode initialize for OptimismPortal: %w", err)
 	}
@@ -401,7 +405,7 @@ func l1Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 			backend,
 			deployment.Args[0].(common.Address),
 			deployment.Args[1].(common.Address),
-			deployment.Args[2].(bool),
+			//deployment.Args[2].(bool),
 			deployment.Args[3].(common.Address),
 		)
 	case "L1CrossDomainMessenger":

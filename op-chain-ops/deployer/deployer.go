@@ -3,9 +3,6 @@ package deployer
 import (
 	"context"
 	"fmt"
-	"math/big"
-	"os"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 	"github.com/ethereum/go-ethereum/common"
@@ -16,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"math/big"
 )
 
 // TestKey is the same test key that geth uses
@@ -95,18 +93,6 @@ func Deploy(backend *backends.SimulatedBackend, constructors []Constructor, cb D
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("_______________________________________________________-")
-	fmt.Println("_______________________________________________________-")
-	fmt.Println("_______________________________________________________-")
-	fmt.Println("_______________________________________________________-")
-	fmt.Println("_______________________________________________________-")
-	fmt.Println("_______________________________________________________-")
-	fmt.Println("_______________________________________________________-")
-	for _, deployment := range constructors {
-		fmt.Println("name", deployment.Name)
-	}
-	os.Exit(0)
 
 	opts.GasLimit = 15_000_000
 
