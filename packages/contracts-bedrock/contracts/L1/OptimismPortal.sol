@@ -108,7 +108,6 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
     /// @notice Pass when onlyMessenger.
     modifier onlyMessenger(){
         require(msg.sender == l1Messenger,"messenger contract unauthenticated");
-        _;
     }
 
     /// @custom:semver 1.7.1
@@ -387,7 +386,7 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         uint64 _gasLimit,
         bool _isCreation,
         bytes memory _data
-    ) public payable metered(_gasLimit) onlyMessenger{
+    ) public metered(_gasLimit) onlyMessenger{
         // Just to be safe, make sure that people specify address(0) as the target when doing
         // contract creations.
         if (_isCreation) {
