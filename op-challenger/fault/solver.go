@@ -22,14 +22,71 @@ func NewSolver(gameDepth int, traceProvider TraceProvider) *Solver {
 }
 
 // NextMove returns the next move to make given the current state of the game.
-func (s *Solver) NextMove(claim Claim, parent Claim) (*Response, error) {
-	parentCorrect, err := s.agreeWithClaim(parent)
+func (s *Solver) NextMove(claim Claim) (*Claim, error) {
+	// Special case of the root claim
+	if claim.IsRoot() {
+		return s.handleRoot(claim)
+	}
+	return s.handleMiddle(claim)
+}
+
+type StepData struct {
+	LeafClaim  Claim
+	StateClaim Claim
+	IsAttack   bool
+}
+
+// AttemptStep determines what step should occur for a given leaf claim.
+// An error will be returned if the claim is not at the max depth.
+func (s *Solver) AttemptStep(claim Claim, state Game) (StepData, error) {
+	if claim.Depth() != s.gameDepth {
+		return StepData{}, errors.New("cannot step on non-leaf claims")
+	}
+	claimCorrect, err := s.agreeWithClaim(claim.ClaimData)
+	if err != nil {
+		return StepData{}, err
+	}
+	var selectorFn func(Claim) (Claim, error)
+	if claimCorrect {
+		selectorFn = state.PostStateClaim
+	} else {
+		selectorFn = state.PreStateClaim
+	}
+	stateClaim, err := selectorFn(claim)
+	if err != nil {
+		return StepData{}, err
+	}
+	return StepData{
+		LeafClaim:  claim,
+		StateClaim: stateClaim,
+		IsAttack:   claimCorrect,
+	}, nil
+}
+
+func (s *Solver) handleRoot(claim Claim) (*Claim, error) {
+	agree, err := s.agreeWithClaim(claim.ClaimData)
 	if err != nil {
 		return nil, err
 	}
-	claimCorrect, err := s.agreeWithClaim(claim)
+	// Attack the root claim if we do not agree with it
+	if !agree {
+		return s.attack(claim)
+	} else {
+		return nil, nil
+	}
+}
+
+func (s *Solver) handleMiddle(claim Claim) (*Claim, error) {
+	parentCorrect, err := s.agreeWithClaim(claim.Parent)
 	if err != nil {
 		return nil, err
+	}
+	claimCorrect, err := s.agreeWithClaim(claim.ClaimData)
+	if err != nil {
+		return nil, err
+	}
+	if claim.Depth() == s.gameDepth {
+		return nil, errors.New("game depth reached")
 	}
 	if parentCorrect && claimCorrect {
 		// We agree with the parent, but the claim is disagreeing with it.
@@ -41,7 +98,7 @@ func (s *Solver) NextMove(claim Claim, parent Claim) (*Response, error) {
 		return s.attack(claim)
 	} else if !parentCorrect && claimCorrect {
 		// Do nothing, we disagree with the parent, but this claim has correctly countered it
-		return s.doNothing()
+		return nil, nil
 	} else if !parentCorrect && !claimCorrect {
 		// We disagree with the parent so want to counter it (which the claim is doing)
 		// but we also disagree with the claim so there must be a difference to the left of claim
@@ -52,30 +109,34 @@ func (s *Solver) NextMove(claim Claim, parent Claim) (*Response, error) {
 	return nil, errors.New("no next move")
 }
 
-func (s *Solver) doNothing() (*Response, error) {
-	return nil, nil
-}
-
 // attack returns a response that attacks the claim.
-func (s *Solver) attack(claim Claim) (*Response, error) {
-	value, err := s.traceAtPosition(claim.Attack())
+func (s *Solver) attack(claim Claim) (*Claim, error) {
+	position := claim.Attack()
+	value, err := s.traceAtPosition(position)
 	if err != nil {
 		return nil, err
 	}
-	return &Response{Attack: true, Value: value}, nil
+	return &Claim{
+		ClaimData: ClaimData{Value: value, Position: position},
+		Parent:    claim.ClaimData,
+	}, nil
 }
 
 // defend returns a response that defends the claim.
-func (s *Solver) defend(claim Claim) (*Response, error) {
-	value, err := s.traceAtPosition(claim.Defend())
+func (s *Solver) defend(claim Claim) (*Claim, error) {
+	position := claim.Defend()
+	value, err := s.traceAtPosition(position)
 	if err != nil {
 		return nil, err
 	}
-	return &Response{Attack: false, Value: value}, nil
+	return &Claim{
+		ClaimData: ClaimData{Value: value, Position: position},
+		Parent:    claim.ClaimData,
+	}, nil
 }
 
-// agreeWithClaim returns true if the [Claim] is correct according to the internal [TraceProvider].
-func (s *Solver) agreeWithClaim(claim Claim) (bool, error) {
+// agreeWithClaim returns true if the claim is correct according to the internal [TraceProvider].
+func (s *Solver) agreeWithClaim(claim ClaimData) (bool, error) {
 	ourValue, err := s.traceAtPosition(claim.Position)
 	return ourValue == claim.Value, err
 }

@@ -130,7 +130,7 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
     }
 
     /// @dev Tests that an attempt to defend the root claim reverts with the `CannotDefendRootClaim` error.
-    function test_defendRoot_invalidMove_reverts() public {
+    function test_move_defendRoot_reverts() public {
         vm.expectRevert(CannotDefendRootClaim.selector);
         gameProxy.defend(0, Claim.wrap(bytes32(uint256(5))));
     }
@@ -175,6 +175,49 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
         gameProxy.attack(0, Claim.wrap(bytes32(uint256(5))));
     }
 
+    /// @notice Static unit test for the correctness of the chess clock incrementation.
+    function test_move_clockCorrectness_succeeds() public {
+        (, , , , Clock clock) = gameProxy.claimData(0);
+        assertEq(
+            Clock.unwrap(clock),
+            Clock.unwrap(LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp))))
+        );
+
+        Claim claim = Claim.wrap(bytes32(uint256(5)));
+
+        vm.warp(block.timestamp + 15);
+        gameProxy.attack(0, claim);
+        (, , , , clock) = gameProxy.claimData(1);
+        assertEq(
+            Clock.unwrap(clock),
+            Clock.unwrap(LibClock.wrap(Duration.wrap(15), Timestamp.wrap(uint64(block.timestamp))))
+        );
+
+        vm.warp(block.timestamp + 10);
+        gameProxy.attack(1, claim);
+        (, , , , clock) = gameProxy.claimData(2);
+        assertEq(
+            Clock.unwrap(clock),
+            Clock.unwrap(LibClock.wrap(Duration.wrap(10), Timestamp.wrap(uint64(block.timestamp))))
+        );
+
+        vm.warp(block.timestamp + 10);
+        gameProxy.attack(2, claim);
+        (, , , , clock) = gameProxy.claimData(3);
+        assertEq(
+            Clock.unwrap(clock),
+            Clock.unwrap(LibClock.wrap(Duration.wrap(25), Timestamp.wrap(uint64(block.timestamp))))
+        );
+
+        vm.warp(block.timestamp + 10);
+        gameProxy.attack(3, claim);
+        (, , , , clock) = gameProxy.claimData(4);
+        assertEq(
+            Clock.unwrap(clock),
+            Clock.unwrap(LibClock.wrap(Duration.wrap(20), Timestamp.wrap(uint64(block.timestamp))))
+        );
+    }
+
     /// @dev Tests that an identical claim cannot be made twice. The duplicate claim attempt should
     ///      revert with the `ClaimAlreadyExists` error.
     function test_move_duplicateClaim_reverts() public {
@@ -189,7 +232,7 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
     }
 
     /// @dev Static unit test for the correctness of an opening attack.
-    function test_simpleAttack_succeeds() public {
+    function test_move_simpleAttack_succeeds() public {
         // Warp ahead 5 seconds.
         vm.warp(block.timestamp + 5);
 
@@ -236,10 +279,18 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
     }
 
     /// @dev Static unit test for the correctness an uncontested root resolution.
-    function test_resolve_rootUncontested() public {
+    function test_resolve_rootUncontested_succeeds() public {
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
         GameStatus status = gameProxy.resolve();
         assertEq(uint8(status), uint8(GameStatus.DEFENDER_WINS));
         assertEq(uint8(gameProxy.status()), uint8(GameStatus.DEFENDER_WINS));
+    }
+
+    /// @dev Static unit test for the correctness an uncontested root resolution.
+    function test_resolve_rootUncontestedClockNotExpired_succeeds() public {
+        vm.warp(block.timestamp + 3 days + 12 hours);
+        vm.expectRevert(ClockNotExpired.selector);
+        gameProxy.resolve();
     }
 
     /// @dev Static unit test asserting that resolve reverts when the game state is
@@ -260,8 +311,10 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
     }
 
     /// @dev Static unit test for the correctness of resolving a single attack game state.
-    function test_resolve_rootContested() public {
+    function test_resolve_rootContested_succeeds() public {
         gameProxy.attack(0, Claim.wrap(bytes32(uint256(5))));
+
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
 
         GameStatus status = gameProxy.resolve();
         assertEq(uint8(status), uint8(GameStatus.CHALLENGER_WINS));
@@ -269,9 +322,11 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
     }
 
     /// @dev Static unit test for the correctness of resolving a game with a contested challenge claim.
-    function test_resolve_challengeContested() public {
+    function test_resolve_challengeContested_succeeds() public {
         gameProxy.attack(0, Claim.wrap(bytes32(uint256(5))));
         gameProxy.defend(1, Claim.wrap(bytes32(uint256(6))));
+
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
 
         GameStatus status = gameProxy.resolve();
         assertEq(uint8(status), uint8(GameStatus.DEFENDER_WINS));
@@ -279,11 +334,13 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
     }
 
     /// @dev Static unit test for the correctness of resolving a game with multiplayer moves.
-    function test_resolve_teamDeathmatch() public {
+    function test_resolve_teamDeathmatch_succeeds() public {
         gameProxy.attack(0, Claim.wrap(bytes32(uint256(5))));
         gameProxy.attack(0, Claim.wrap(bytes32(uint256(4))));
         gameProxy.defend(1, Claim.wrap(bytes32(uint256(6))));
         gameProxy.defend(1, Claim.wrap(bytes32(uint256(7))));
+
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
 
         GameStatus status = gameProxy.resolve();
         assertEq(uint8(status), uint8(GameStatus.CHALLENGER_WINS));
@@ -391,7 +448,7 @@ contract GamePlayer {
 
                 // Now, search for the index of the claim that commits to the prestate's trace
                 // index.
-                uint256 len = claimDataLen();
+                uint256 len = gameProxy.claimDataLen();
                 for (uint256 i = 0; i < len; i++) {
                     (, , , Position pos, ) = gameProxy.claimData(i);
                     if (Position.unwrap(pos) == Position.unwrap(statePos)) {
@@ -424,7 +481,7 @@ contract GamePlayer {
                 // Attack the parent claim.
                 gameProxy.attack(_parentIndex, ourClaim);
                 // Call out to our counter party to respond.
-                counterParty.play(claimDataLen() - 1);
+                counterParty.play(gameProxy.claimDataLen() - 1);
 
                 // If we have a second move position, attack the grandparent.
                 if (Position.unwrap(movePos2) != 0) {
@@ -432,20 +489,15 @@ contract GamePlayer {
                     Claim ourGrandparentClaim = claimAt(grandparentPos.move(true));
 
                     gameProxy.attack(grandparentIndex, ourGrandparentClaim);
-                    counterParty.play(claimDataLen() - 1);
+                    counterParty.play(gameProxy.claimDataLen() - 1);
                 }
             } else {
                 // Defend the parent claim.
                 gameProxy.defend(_parentIndex, ourClaim);
                 // Call out to our counter party to respond.
-                counterParty.play(claimDataLen() - 1);
+                counterParty.play(gameProxy.claimDataLen() - 1);
             }
         }
-    }
-
-    /// @notice Returns the length of the claim data array.
-    function claimDataLen() internal view returns (uint256 len_) {
-        return uint256(vm.load(address(gameProxy), bytes32(uint256(1))));
     }
 
     /// @notice Returns the state at the trace index within the player's trace.
@@ -504,6 +556,9 @@ contract FaultDisputeGame_ResolvesCorrectly_IncorrectRoot is OneVsOne_Arena {
         // Play the game until a step is forced.
         challenger.play(0);
 
+        // Warp ahead to expire the other player's clock.
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
+
         // Resolve the game and assert that the honest player challenged the root
         // claim successfully.
         assertEq(uint8(gameProxy.resolve()), uint8(GameStatus.CHALLENGER_WINS));
@@ -521,6 +576,9 @@ contract FaultDisputeGame_ResolvesCorrectly_CorrectRoot is OneVsOne_Arena {
     function test_resolvesCorrectly_succeeds() public {
         // Play the game until a step is forced.
         challenger.play(0);
+
+        // Warp ahead to expire the other player's clock.
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
 
         // Resolve the game and assert that the dishonest player challenged the root
         // claim unsuccessfully.
@@ -540,6 +598,9 @@ contract FaultDisputeGame_ResolvesCorrectly_IncorrectRoot2 is OneVsOne_Arena {
         // Play the game until a step is forced.
         challenger.play(0);
 
+        // Warp ahead to expire the other player's clock.
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
+
         // Resolve the game and assert that the honest player challenged the root
         // claim successfully.
         assertEq(uint8(gameProxy.resolve()), uint8(GameStatus.CHALLENGER_WINS));
@@ -557,6 +618,9 @@ contract FaultDisputeGame_ResolvesCorrectly_CorrectRoot2 is OneVsOne_Arena {
     function test_resolvesCorrectly_succeeds() public {
         // Play the game until a step is forced.
         challenger.play(0);
+
+        // Warp ahead to expire the other player's clock.
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
 
         // Resolve the game and assert that the dishonest player challenged the root
         // claim unsuccessfully.
@@ -576,6 +640,9 @@ contract FaultDisputeGame_ResolvesCorrectly_IncorrectRoot3 is OneVsOne_Arena {
         // Play the game until a step is forced.
         challenger.play(0);
 
+        // Warp ahead to expire the other player's clock.
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
+
         // Resolve the game and assert that the honest player challenged the root
         // claim successfully.
         assertEq(uint8(gameProxy.resolve()), uint8(GameStatus.CHALLENGER_WINS));
@@ -593,6 +660,9 @@ contract FaultDisputeGame_ResolvesCorrectly_CorrectRoot3 is OneVsOne_Arena {
     function test_resolvesCorrectly_succeeds() public {
         // Play the game until a step is forced.
         challenger.play(0);
+
+        // Warp ahead to expire the other player's clock.
+        vm.warp(block.timestamp + 3 days + 12 hours + 1 seconds);
 
         // Resolve the game and assert that the dishonest player challenged the root
         // claim unsuccessfully.

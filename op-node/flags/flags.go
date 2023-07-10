@@ -44,23 +44,29 @@ var (
 		Usage:   fmt.Sprintf("Predefined network selection. Available networks: %s", strings.Join(chaincfg.AvailableNetworks(), ", ")),
 		EnvVars: prefixEnvVars("NETWORK"),
 	}
+	/* Optional Flags */
 	RPCListenAddr = &cli.StringFlag{
 		Name:    "rpc.addr",
 		Usage:   "RPC listening address",
 		EnvVars: prefixEnvVars("RPC_ADDR"),
+		Value:   "127.0.0.1",
 	}
 	RPCListenPort = &cli.IntFlag{
 		Name:    "rpc.port",
 		Usage:   "RPC listening port",
 		EnvVars: prefixEnvVars("RPC_PORT"),
+		Value:   9545, // Note: op-service/rpc/cli.go uses 8545 as the default.
 	}
 	RPCEnableAdmin = &cli.BoolFlag{
 		Name:    "rpc.enable-admin",
 		Usage:   "Enable the admin API (experimental)",
 		EnvVars: prefixEnvVars("RPC_ENABLE_ADMIN"),
 	}
-
-	/* Optional Flags */
+	RPCAdminPersistence = &cli.StringFlag{
+		Name:    "rpc.admin-state",
+		Usage:   "File path used to persist state changes made via the admin API so they persist across restarts. Disabled if not set.",
+		EnvVars: prefixEnvVars("RPC_ADMIN_STATE"),
+	}
 	L1TrustRPC = &cli.BoolFlag{
 		Name:    "l1.trustrpc",
 		Usage:   "Trust the L1 RPC, sync faster at risk of malicious/buggy RPC providing bad or inconsistent L1 data",
@@ -148,7 +154,7 @@ var (
 	MetricsAddrFlag = &cli.StringFlag{
 		Name:    "metrics.addr",
 		Usage:   "Metrics listening address",
-		Value:   "0.0.0.0",
+		Value:   "0.0.0.0", // TODO(CLI-4159): Switch to 127.0.0.1
 		EnvVars: prefixEnvVars("METRICS_ADDR"),
 	}
 	MetricsPortFlag = &cli.IntFlag{
@@ -165,7 +171,7 @@ var (
 	PprofAddrFlag = &cli.StringFlag{
 		Name:    "pprof.addr",
 		Usage:   "pprof listening address",
-		Value:   "0.0.0.0",
+		Value:   "0.0.0.0", // TODO(CLI-4159): Switch to 127.0.0.1
 		EnvVars: prefixEnvVars("PPROF_ADDR"),
 	}
 	PprofPortFlag = &cli.IntFlag{
@@ -213,11 +219,11 @@ var (
 var requiredFlags = []cli.Flag{
 	L1NodeAddr,
 	L2EngineAddr,
-	RPCListenAddr,
-	RPCListenPort,
 }
 
 var optionalFlags = []cli.Flag{
+	RPCListenAddr,
+	RPCListenPort,
 	RollupConfig,
 	Network,
 	L1TrustRPC,
@@ -233,6 +239,7 @@ var optionalFlags = []cli.Flag{
 	SequencerL1Confs,
 	L1EpochPollIntervalFlag,
 	RPCEnableAdmin,
+	RPCAdminPersistence,
 	MetricsEnabledFlag,
 	MetricsAddrFlag,
 	MetricsPortFlag,

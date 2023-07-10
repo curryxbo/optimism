@@ -34,7 +34,6 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
     IBigStepper public immutable VM;
 
     /// @notice The duration of the game.
-    /// @dev TODO: Account for resolution buffer. (?)
     Duration internal constant GAME_DURATION = Duration.wrap(7 days);
 
     /// @notice The root claim's position is always at gindex 1.
@@ -72,12 +71,12 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
 
     /// @inheritdoc IFaultDisputeGame
     function attack(uint256 _parentIndex, Claim _pivot) external payable {
-        _move(_parentIndex, _pivot, true);
+        move(_parentIndex, _pivot, true);
     }
 
     /// @inheritdoc IFaultDisputeGame
     function defend(uint256 _parentIndex, Claim _pivot) external payable {
-        _move(_parentIndex, _pivot, false);
+        move(_parentIndex, _pivot, false);
     }
 
     /// @inheritdoc IFaultDisputeGame
@@ -162,11 +161,11 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
     /// @param _challengeIndex The index of the claim being moved against.
     /// @param _pivot The claim at the next logical position in the game.
     /// @param _isAttack Whether or not the move is an attack or defense.
-    function _move(
+    function move(
         uint256 _challengeIndex,
         Claim _pivot,
         bool _isAttack
-    ) internal {
+    ) public payable {
         // Moves cannot be made unless the game is currently in progress.
         if (status != GameStatus.IN_PROGRESS) {
             revert GameNotInProgress();
@@ -254,6 +253,11 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
         l2BlockNumber_ = _getArgUint256(0x20);
     }
 
+    /// @notice Returns the length of the `claimData` array.
+    function claimDataLen() external view returns (uint256 len_) {
+        len_ = claimData.length;
+    }
+
     ////////////////////////////////////////////////////////////////
     //                    `IDisputeGame` impl                     //
     ////////////////////////////////////////////////////////////////
@@ -270,10 +274,8 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
 
     /// @inheritdoc IDisputeGame
     function resolve() external returns (GameStatus status_) {
-        // TODO: Do not allow resolution before clocks run out.
-
+        // If the game is not in progress, it cannot be resolved.
         if (status != GameStatus.IN_PROGRESS) {
-            // If the game is not in progress, it cannot be resolved.
             revert GameNotInProgress();
         }
 
@@ -293,7 +295,6 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
 
             // If the claim is not a dangling node above the bottom of the tree,
             // we can skip over it. These nodes are not relevant to the game resolution.
-            Position claimPos = claim.position;
             if (claim.countered) {
                 continue;
             }
@@ -301,7 +302,7 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
             // If the claim is a dangling node, we can check if it is the left-most
             // dangling node we've come across so far. If it is, we can update the
             // left-most trace index.
-            uint256 traceIndex = claimPos.traceIndex(MAX_GAME_DEPTH);
+            uint256 traceIndex = claim.position.traceIndex(MAX_GAME_DEPTH);
             if (traceIndex < leftMostTraceIndex) {
                 leftMostTraceIndex = traceIndex;
                 unchecked {
@@ -310,12 +311,29 @@ contract FaultDisputeGame is IFaultDisputeGame, Clone, Semver {
             }
         }
 
+        // Create a reference to the left most uncontested claim and its parent.
+        ClaimData storage leftMostUncontested = claimData[leftMostIndex];
+
+        // If the left most uncontested claim's parent has not expired their clock, the game
+        // cannot be resolved. If the left most uncontested claim is the root, no nodes qualified,
+        // and we check if 3.5 days has passed since the root claim's creation.
+        uint256 parentIndex = leftMostUncontested.parentIndex;
+        Clock opposingClock = parentIndex == type(uint32).max
+            ? leftMostUncontested.clock
+            : claimData[parentIndex].clock;
+        if (
+            Duration.unwrap(opposingClock.duration()) +
+                (block.timestamp - Timestamp.unwrap(opposingClock.timestamp())) <=
+            Duration.unwrap(GAME_DURATION) >> 1
+        ) {
+            revert ClockNotExpired();
+        }
+
         // If the left-most dangling node is at an even depth, the defender wins.
         // Otherwise, the challenger wins and the root claim is deemed invalid.
         if (
             // slither-disable-next-line weak-prng
-            claimData[leftMostIndex].position.depth() % 2 == 0 &&
-            leftMostTraceIndex != type(uint128).max
+            leftMostUncontested.position.depth() % 2 == 0 && leftMostTraceIndex != type(uint128).max
         ) {
             status_ = GameStatus.DEFENDER_WINS;
         } else {

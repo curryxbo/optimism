@@ -8,76 +8,66 @@ import (
 	"github.com/ethereum-optimism/optimism/op-challenger/fault"
 )
 
+func PrettyPrintAlphabetClaim(name string, claim fault.Claim) {
+	value := claim.Value
+	idx := value[30]
+	letter := value[31]
+	if claim.IsRoot() {
+		fmt.Printf("%s\ttrace %v letter %c\n", name, idx, letter)
+	} else {
+		fmt.Printf("%s\ttrace %v letter %c is attack %v\n", name, idx, letter, !claim.DefendsParent())
+	}
+
+}
+
 // SolverExampleOne uses the [fault.Solver] with a [fault.AlphabetProvider]
 // to print out fault game traces for the "abcdexyz" counter-state.
 func SolverExampleOne() {
-	fmt.Println()
 	fmt.Println("Solver: Example 1")
-	fmt.Println()
 
 	// Construct the fault position.
 	canonical := "abcdefgh"
 	disputed := "abcdexyz"
 	maxDepth := 3
-	parent := fault.Claim{
-		Value:    common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000768"),
-		Position: fault.NewPosition(0, 0),
+	// Root claim is z at trace index 7 from the disputed provider
+	root := fault.Claim{
+		ClaimData: fault.ClaimData{
+			Value:    common.HexToHash("0x000000000000000000000000000000000000000000000000000000000000077a"),
+			Position: fault.NewPosition(0, 0),
+		},
 	}
+
 	canonicalProvider := fault.NewAlphabetProvider(canonical, uint64(maxDepth))
 	disputedProvider := fault.NewAlphabetProvider(disputed, uint64(maxDepth))
 
 	// Create a solver with the canonical provider.
-	solver := fault.NewSolver(maxDepth, canonicalProvider)
+	cannonicalSolver := fault.NewSolver(maxDepth, canonicalProvider)
+	disputedSolver := fault.NewSolver(maxDepth, disputedProvider)
 
 	// Print the initial state.
 	fmt.Println("Canonical state: ", canonical)
-	fmt.Println("Disputed state: ", disputed)
+	fmt.Println("Disputed state:  ", disputed)
 	fmt.Println()
 	fmt.Println("Proceeding with the following moves:")
-	fmt.Println("go left to d, then right to f, then left to e")
+	fmt.Println("go left to d, then right to x (cannonical is f), then left to e")
 	fmt.Println()
+	PrettyPrintAlphabetClaim("Root claim", root)
 
-	// Get the claim from the disputed provider.
-	claim, err := disputedProvider.Get(3)
+	claim1, err := cannonicalSolver.NextMove(root)
 	if err != nil {
-		fmt.Printf("error getting claim from disputed provider: %v", err)
+		fmt.Printf("error getting claim from provider: %v", err)
 	}
-	firstDisputedClaim := fault.Claim{
-		Value:    claim,
-		Position: fault.NewPosition(1, 0),
-	}
-	res, err := solver.NextMove(firstDisputedClaim, parent)
-	if err != nil {
-		fmt.Printf("error getting next move: %v", err)
-	}
-	fmt.Printf("Disputed claim: %s\n", claim)
-	fmt.Printf("Expected claim: %s\n", parent.Value)
-	fmt.Printf("Response: [Attack: %v, Value: %s]\n", res.Attack, res.Value)
-	fmt.Println()
+	PrettyPrintAlphabetClaim("Cannonical move", *claim1)
 
-	// Get the next claim from the disputed provider.
-	claim, err = disputedProvider.Get(5)
+	claim2, err := disputedSolver.NextMove(*claim1)
 	if err != nil {
-		fmt.Printf("error getting claim from disputed provider: %v", err)
+		fmt.Printf("error getting claim from provider: %v", err)
 	}
-	firstDisputedClaim = fault.Claim{
-		Value:    claim,
-		Position: fault.NewPosition(2, 2),
-	}
-	res, err = solver.NextMove(firstDisputedClaim, parent)
-	if err != nil {
-		fmt.Printf("error getting next move: %v", err)
-	}
-	fmt.Printf("Disputed claim: %s\n", claim)
-	fmt.Printf("Expected claim: %s\n", parent.Value)
-	fmt.Printf("Response: [Attack: %v, Value: %s]\n", res.Attack, res.Value)
-	fmt.Println()
+	PrettyPrintAlphabetClaim("Disputed moved", *claim2)
 
-	// This marks the end of the game!
-	if res.Attack {
-		fmt.Println("Game successfully completed!")
-	} else {
-		fmt.Println("Game failed!")
+	claim3, err := cannonicalSolver.NextMove(*claim2)
+	if err != nil {
+		fmt.Printf("error getting claim from provider: %v", err)
 	}
-	fmt.Println()
+	PrettyPrintAlphabetClaim("Cannonical move", *claim3)
 }
