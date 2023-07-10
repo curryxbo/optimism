@@ -104,7 +104,7 @@ func BuildL1DeveloperGenesis(config *DeployConfig) (*core.Genesis, error) {
 	}
 
 	// Initialize the OptimismPortal without being paused
-	data, err := portalABI.Pack("initialize", false, depsByName["L1CrossDomainMessenger"].Address)
+	data, err := portalABI.Pack("initialize", false, config.L1CrossDomainMessengerProxy)
 	if err != nil {
 		return nil, fmt.Errorf("cannot abi encode initialize for OptimismPortal: %w", err)
 	}
